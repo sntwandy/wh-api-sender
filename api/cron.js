@@ -73,5 +73,12 @@ async function sendWhatsAppMessage(user_client, daysLate) {
   }
 }
 
-// Ejecutar la tarea
-checkPayments();
+// Exporta una función para Vercel
+module.exports = async (req, res) => {
+  try {
+    await checkPayments();
+    res.status(200).send("Verificación de pagos completada.");
+  } catch (error) {
+    res.status(500).send(`Error al verificar pagos: ${error.message}`);
+  }
+};
