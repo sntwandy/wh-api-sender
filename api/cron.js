@@ -14,57 +14,64 @@ const authToken = process.env.TWILIO_AUTH_TOKEN;
 const client = twilio(accountSid, authToken);
 const fromWhatsApp = "whatsapp:+14155238886"; // Replace with your Twilio WhatsApp number
 
-// Function to check due payments
+// Función para verificar pagos vencidos
 async function checkPayments() {
-	const today = dayjs(); // Current date
+  const today = dayjs(); // Fecha actual
 
-	// Fetch clients with last_payment and pay_day fields
-	let { data: clients, error } = await supabase
-		.from("clients")
-		.select("id, name, phone_number, last_payment, pay_day");
+  // Obtener clientes con los campos last_payment y pay_day
+  let { data: clients, error } = await supabase
+    .from("clients")
+    .select("id, name, phone_number, last_payment, pay_day");
 
-	if (error) {
-		console.error("Error fetching clients:", error);
-		return;
-	}
+  if (error) {
+    console.error("Error al obtener los clientes:", error);
+    return;
+  }
 
-	// Iterate through clients and determine if payment is due
-	for (let client of clients) {
-		const lastPaymentDate = dayjs(client.last_payment); // Last payment date
-		const currentMonth = today.month(); // Current month (0-based index, January is 0)
-		const currentYear = today.year();
+  // Iterar sobre los clientes y determinar si el pago está vencido
+  for (let client of clients) {
+    const lastPaymentDate = dayjs(client.last_payment); // Fecha del último pago
+    const currentMonth = today.month(); // Mes actual (índice basado en 0, enero es 0)
+    const currentYear = today.year();
 
-		// Check if the current month and year are different from the last payment month/year
-		const isNewMonth =
-			lastPaymentDate.month() < currentMonth ||
-			lastPaymentDate.year() < currentYear;
+    // Verificar si el mes y el año actuales son diferentes del mes/año del último pago
+    const isNewMonth =
+      lastPaymentDate.month() < currentMonth ||
+      lastPaymentDate.year() < currentYear;
 
-		// Check if today is past the pay_day
-		const isPaymentDue = today.date() > client.pay_day;
+    // Verificar si la fecha actual está después del día de pago
+    const isPaymentDue = today.date() > client.pay_day;
 
-		// If it's a new month and past the pay_day, the user has a due payment
-		if (isNewMonth && isPaymentDue) {
-			await sendWhatsAppMessage(client);
-		}
-	}
+    // Si es un nuevo mes y estamos después del día de pago, el pago está vencido
+    if (isNewMonth && isPaymentDue) {
+      try {
+        const daysLate = today.diff(lastPaymentDate, 'day'); // Días de atraso
+        await sendWhatsAppMessage(client, daysLate);
+      } catch (error) {
+        console.error(`Error al enviar mensaje para el cliente ${client.name}:`, error);
+      }
+    }
+  }
 }
 
-// Function to send WhatsApp message using Twilio
-async function sendWhatsAppMessage(client) {
-	const message = `Hello ${client.name}, this is a reminder that you have a due payment for this month. Please make the payment as soon as possible.`;
+// Función para enviar un mensaje de WhatsApp usando Twilio
+async function sendWhatsAppMessage(user_client, daysLate) {
+  const message = `Hola ${user_client.name}, le hablamos de Hard Training, este es un recordatorio de que tiene un pago vencido de ${daysLate} días. Por favor, realice el pago lo antes posible para evitar inconvenientes.`;
 
-	// Send WhatsApp message
-	try {
-		const response = await client.messages.create({
-			body: message,
-			from: fromWhatsApp, // Twilio WhatsApp number
-			to: `whatsapp:${client.phone}`, // Client's phone number
-		});
-		console.log(`Message sent to ${client.name} (${client.phone})`);
-	} catch (error) {
-		console.error(`Failed to send message to ${client.name}:`, error);
-	}
+  // Enviar mensaje de WhatsApp
+  try {
+    const response = await client.messages.create({
+      body: message,
+      from: fromWhatsApp, // Número de WhatsApp de Twilio
+      to: `whatsapp:${user_client.phone_number}`, // Número de teléfono del cliente
+    });
+    console.log(
+      `Mensaje enviado a ${user_client.name} (${user_client.phone_number})`
+    );
+  } catch (error) {
+    console.error(`Error al enviar mensaje a ${user_client.name}:`, error);
+  }
 }
 
-// Run the job
+// Ejecutar la tarea
 checkPayments();
